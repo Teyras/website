@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="en" prefix="og: http://ogp.me/ns# fb: https://www.facebook.com/2008/fbml">
+<head>
+    <title>My web development setup with uWSGI - Jan Buchar</title>
+    <!-- Using the latest rendering mode for IE -->
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+
+
+<link rel="canonical" href="https://bucharjan.cz/blog/web-development-setup-with-uwsgi.html">
+
+        <meta name="author" content="Jan Buchar" />
+        <meta name="keywords" content="uwsgi,nginx,linux,web,python,php" />
+        <meta name="description" content="Until recently, I&#39;ve used pretty much the same LAMP environment I installed when I started with GNU/Linux. It had many drawbacks, the most important being cryptic configuration (hello, mod_rewrite) and the need to edit files as root when adding new applications using VirtualHosts. Also, running Python applications is quite …" />
+
+        <meta property="og:site_name" content="Jan Buchar" />
+        <meta property="og:type" content="article"/>
+        <meta property="og:title" content="My web development setup with uWSGI"/>
+        <meta property="og:url" content="https://bucharjan.cz/blog/web-development-setup-with-uwsgi.html"/>
+        <meta property="og:description" content="Until recently, I&#39;ve used pretty much the same LAMP environment I installed when I started with GNU/Linux. It had many drawbacks, the most important being cryptic configuration (hello, mod_rewrite) and the need to edit files as root when adding new applications using VirtualHosts. Also, running Python applications is quite …"/>
+        <meta property="article:published_time" content="2016-09-05" />
+            <meta property="article:section" content="Web development" />
+            <meta property="article:tag" content="uwsgi" />
+            <meta property="article:tag" content="nginx" />
+            <meta property="article:tag" content="linux" />
+            <meta property="article:tag" content="web" />
+            <meta property="article:tag" content="python" />
+            <meta property="article:tag" content="php" />
+            <meta property="article:author" content="Jan Buchar" />
+
+
+    <link rel="stylesheet" href="https://bucharjan.cz/theme/css/style.min.css?b7f6c95d"/>
+
+    <link href="https://bucharjan.cz/theme/css/font-awesome.min.css" rel="stylesheet">
+
+    <link href="https://bucharjan.cz/theme/css/pygments/native.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://bucharjan.cz/theme/css/style.css" type="text/css"/>
+
+        <link href="https://bucharjan.cz/feeds/all.atom.xml" type="application/atom+xml" rel="alternate"
+              title="Jan Buchar ATOM Feed"/>
+
+
+
+        <link href="https://bucharjan.cz/feeds/web-development.atom.xml" type="application/atom+xml" rel="alternate"
+              title="Jan Buchar Web development ATOM Feed"/>
+
+</head>
+<body>
+
+<div class="page-row page-row-expanded">
+<div class="navbar navbar-default" role="navigation">
+	<div class="container">
+        <div class="navbar-header">
+            <button type="button" class="navbar-toggle" data-toggle="collapse" data-target=".navbar-ex1-collapse">
+		    <span class="sr-only">Toggle navigation</span>
+                <span class="icon-bar"></span>
+                <span class="icon-bar"></span>
+                <span class="icon-bar"></span>
+            </button>
+            <a href="https://bucharjan.cz/" class="navbar-brand">
+Jan Buchar            </a>
+        </div>
+        <div class="collapse navbar-collapse navbar-ex1-collapse">
+            <ul class="nav navbar-nav">
+		<li class="active"><a href="https://bucharjan.cz/blog/">Blog</a></li>
+            </ul>
+            <ul class="nav navbar-nav navbar-right">
+		    <li class="active"><a href="https://bucharjan.cz">English</a></li>
+		    <li><a href="https://bucharjan.cz/cs">Čeština</a></li>
+		    <!-- OrderedDict([('cs', 'https://bucharjan.cz/cs')]) -->
+	    <li><a href="https://bucharjan.cz/blog/archives/archives.html"><i class="fa fa-th-list"></i><span class="icon-label">Archives</span></a></li>
+            </ul>
+        </div>
+        <!-- /.navbar-collapse -->
+    </div>
+</div> <!-- /.navbar -->
+<!-- Banner -->
+<!-- End Banner -->
+<div id="main" class="container">
+    <div class="row">
+        <div class="col-sm-9">
+    <section id="content">
+        <article>
+            <header class="page-header">
+                <h1>
+                    <a href="https://bucharjan.cz/blog/web-development-setup-with-uwsgi.html"
+                       rel="bookmark"
+                       title="Permalink to My web development setup with uWSGI">
+                        My web development setup with uWSGI
+                    </a>
+                </h1>
+            </header>
+            <div class="entry-content">
+                <div class="panel">
+                    <div class="panel-body">
+<footer class="post-info">
+	<span class="label label-default">Date</span>
+    <span class="published">
+        <i class="fa fa-calendar"></i><time datetime="2016-09-05T21:05:00+02:00"> 05/09/16</time>
+    </span>
+
+
+
+
+
+<span class="label label-default">Tags</span>
+	<a href="https://bucharjan.cz/blog/tag/uwsgi.html">uwsgi</a>
+        /
+	<a href="https://bucharjan.cz/blog/tag/nginx.html">nginx</a>
+        /
+	<a href="https://bucharjan.cz/blog/tag/linux.html">linux</a>
+        /
+	<a href="https://bucharjan.cz/blog/tag/web.html">web</a>
+        /
+	<a href="https://bucharjan.cz/blog/tag/python.html">python</a>
+        /
+	<a href="https://bucharjan.cz/blog/tag/php.html">php</a>
+    
+</footer><!-- /.post-info -->                    </div>
+                </div>
+                <p>Until recently, I've used pretty much the same LAMP environment I installed when 
+I started with GNU/Linux. It had many drawbacks, the most important being 
+cryptic configuration (hello, mod_rewrite) and the need to edit files as root 
+when adding new applications using VirtualHosts. Also, running Python 
+applications is quite a pain with Apache and mod_wsgi - most of the time, I just 
+went with whatever development server my framework offered.</p>
+<p>Then I stumbled upon uWSGI. I was blown away with how versatile this web 
+application server is - it supports a plethora of programming languages, has a 
+powerful routing system and loads of other features. I experimented with it for 
+some time and this is the result - a flexible web development environment using 
+uWSGI and Nginx.</p>
+<h2>Pluggable applications with uWSGI</h2>
+<p>First, we'll start uWSGI in Emperor mode. It will monitor a path and make sure 
+that all uWSGI configuration files found there are running. It also reloads the 
+applications when their configuration changes. We'll be putting our applications 
+in <code>~/WWW</code>, with the following structure:</p>
+<div class="highlight"><pre><span></span>~/WWW
+├── app1
+│   ├── app1.ini
+│   ├── file1
+│   └── file2
+└── app2
+    ├── app2.ini
+    ├── file1
+    └── file2
+</pre></div>
+
+
+<p>As we see, there is a folder for each application that contains its sources and 
+also a uWSGI configuration file. The name of this file is used as the vassal 
+name by the Emperor. We'll start the Emperor now:</p>
+<div class="highlight"><pre><span></span>uwsgi --emperor <span class="s2">&quot;~/WWW/*/*.ini&quot;</span> <span class="se">\</span>
+      --emperor-on-demand-directory /tmp/uwsgi/ <span class="se">\</span>
+      --logto %h/WWW/uwsgi.log <span class="se">\</span>
+      --vassals-set socket-chmod<span class="o">=</span><span class="m">666</span> <span class="se">\</span>
+      --vassals-set <span class="nv">idle</span><span class="o">=</span><span class="m">900</span> <span class="se">\</span>
+      --vassals-set die-on-idle<span class="o">=</span><span class="m">1</span>
+</pre></div>
+
+
+<p>The <code>--emperor-on-demand-directory</code> flag tells the Emperor to make a UNIX domain 
+socket for each application (named <code>&lt;vassal_name&gt;.socket</code>) in given directory 
+and activate the application when someone connects to that socket. When we 
+combine this with <code>--idle</code> and <code>--die-on-idle</code> on the vassals, we get a 
+webserver that automatically stops unused applications and their daemons. </p>
+<p>We also need nginx to have read and write access to the sockets - that's why we 
+set their permissions to 666. If we wanted to be a bit more strict, we could 
+make a group for our user and nginx and <code>chown</code> the sockets to this group.</p>
+<p>Now, let's add an application! This one will be in PHP, but use whatever you 
+feel like. First, the "application" itself:</p>
+<div class="highlight"><pre><span></span><span class="x"># ~/WWW/testapp/index.php</span>
+<span class="cp">&lt;?php</span>
+<span class="k">echo</span> <span class="s2">&quot;Hello from uWSGI&quot;</span><span class="p">;</span>
+</pre></div>
+
+
+<p>Now, we'll write the configuration file that tells uWSGI how to run it. </p>
+<div class="highlight"><pre><span></span><span class="c1"># ~/WWW/testapp/testapp.ini</span>
+<span class="k">[uwsgi]</span>
+<span class="na">chdir</span> <span class="o">=</span> <span class="s">%d</span>
+
+<span class="c1"># PHP settings</span>
+<span class="na">plugin</span> <span class="o">=</span> <span class="s">0:php</span>
+<span class="na">php-docroot</span> <span class="o">=</span> <span class="s">%d</span>
+<span class="na">check-static</span> <span class="o">=</span> <span class="s">%d</span>
+<span class="na">php-app</span> <span class="o">=</span> <span class="s">%d/index.php</span>
+</pre></div>
+
+
+<p>Noticed the <code>0:</code> in the <code>plugin</code> option? This little detail is actually really 
+important - it tells uWSGI to route HTTP requests to the PHP plugin. For more 
+details, see the documentation for <code>modifier1</code>.</p>
+<p>The Emperor should now notice the configuration file and run our application. 
+It is however bound to a UNIX domain socket - to access it, we need a 
+webserver to forward actual HTTP requests to it.</p>
+<h2>Nginx - the fixed part</h2>
+<p>Nginx will serve as a gateway to our applications. It should pass requests to 
+subdomains on localhost to corresponding UNIX domain sockets that belong to the 
+uWSGI vassals - requests on <code>myapp.localhost</code> will be passed to 
+<code>/tmp/uwsgi/myapp.socket</code>.</p>
+<div class="highlight"><pre><span></span><span class="c1"># nginx.conf</span>
+<span class="k">http</span> <span class="p">{</span>
+        <span class="kn">server</span> <span class="p">{</span>
+                <span class="kn">listen</span> <span class="mi">80</span><span class="p">;</span>
+                <span class="kn">server_name</span> <span class="p">~</span><span class="sr">^(?&lt;app&gt;[^.]+)\.localhost;</span>
+
+                <span class="s">location</span> <span class="s">/</span> <span class="p">{</span>
+                        <span class="kn">include</span> <span class="s">uwsgi_params</span><span class="p">;</span>
+                        <span class="kn">uwsgi_pass</span> <span class="s">unix:/tmp/uwsgi/</span><span class="nv">$app.socket</span><span class="p">;</span>
+                <span class="p">}</span>
+        <span class="p">}</span>
+<span class="p">}</span>
+</pre></div>
+
+
+<p>This is not a complete configuration file - I only included the relevant parts. 
+That being said, you should now be able to open <code>testapp.localhost</code> in a web 
+browser and see the output!</p>
+<h2>Bonus - running uWSGI with systemd</h2>
+<p>If you're running a recent GNU/Linux distribution, it's likely that you use 
+systemd. One of its better features is that it lets users run their own services 
+without any special privileges. We'll use that to make sure our uWSGI Emperor is 
+always running. First, we create a systemd unit file:</p>
+<div class="highlight"><pre><span></span><span class="c1"># ~/.config/systemd/user/uwsgi-emperor.service</span>
+<span class="k">[Unit]</span>
+<span class="na">Description</span><span class="o">=</span><span class="s">uWSGI Emperor</span>
+
+<span class="k">[Service]</span>
+<span class="na">ExecStartPre</span><span class="o">=</span><span class="s">/usr/bin/mkdir -p /tmp/uwsgi/</span>
+<span class="na">ExecStartPre</span><span class="o">=</span><span class="s">/usr/bin/chmod 777 /tmp/uwsgi/</span>
+<span class="na">ExecStart</span><span class="o">=</span><span class="s">/usr/bin/uwsgi \</span>
+<span class="s">          --emperor &quot;%h/WWW/*/*.ini&quot; \</span>
+<span class="s">          --emperor-on-demand-directory /tmp/uwsgi/ \</span>
+<span class="s">          --logto %h/WWW/uwsgi.log \</span>
+<span class="s">          --vassals-set socket-chmod=666 \</span>
+<span class="s">          --vassals-set idle=900 \</span>
+<span class="s">          --vassals-set die-on-idle=1</span>
+
+<span class="k">[Install]</span>
+<span class="na">WantedBy</span><span class="o">=</span><span class="s">default.target</span>
+</pre></div>
+
+
+<p>Now we'll make sure that the uWSGI Emperor starts when we log in:</p>
+<div class="highlight"><pre><span></span>$ systemctl --user daemon-reload
+$ systemctl --user <span class="nb">enable</span> uwsgi-emperor
+$ systemctl --user start uwsgi-emperor
+</pre></div>
+
+
+<h2>Conclusion</h2>
+<p>We have set up a development environment where we can program in Python, Ruby, 
+PHP and tons of other languages (I also used it to run Pelican when I wrote this 
+post). All our code runs under a regular user (if that wasn't enough, uWSGI can 
+sandbox it using lxc). The applications are accessible with pretty URLs on the 
+standard HTTP port, which makes it easy to test them on various devices.</p>
+            </div>
+            <!-- /.entry-content -->
+        </article>
+    </section>
+
+        </div>
+        <div class="col-sm-3" id="sidebar">
+            <aside>
+
+<section>
+    <ul class="list-group list-group-flush">
+	<li class="list-group-item"><h4>Social</h4>
+              <ul class="list-group" id="social">
+                <li class="list-group-item"><a href="https://github.com/Teyras"><i class="fa fa-github-square fa-lg"></i> Github</a></li>
+                <li class="list-group-item"><a href="https://www.linkedin.com/in/jan-buchar"><i class="fa fa-linkedin-square fa-lg"></i> Linkedin</a></li>
+                <li class="list-group-item"><a href="https://stackoverflow.com/users/2839862/teyras?tab=profile"><i class="fa fa-stack-overflow fa-lg"></i> Stack overflow</a></li>
+              </ul>
+            </li>
+
+	    <li class="list-group-item"><h4>Recent posts</h4>
+                <ul class="list-group" id="recentposts">
+                    <li class="list-group-item">
+                        <a href="https://bucharjan.cz/blog/using-cython-to-protect-a-python-codebase.html">
+                            Using Cython to protect a Python codebase
+                        </a>
+                    </li>
+                    <li class="list-group-item">
+                        <a href="https://bucharjan.cz/blog/plasma-custom-modifier-only-shortcuts.html">
+                            Custom modifier-only shortcuts in Plasma 5.8
+                        </a>
+                    </li>
+                    <li class="list-group-item">
+                        <a href="https://bucharjan.cz/blog/web-development-setup-with-uwsgi.html">
+                            My web development setup with uWSGI
+                        </a>
+                    </li>
+                </ul>
+            </li>
+
+
+
+
+    </ul>
+</section>
+            </aside>
+        </div>
+    </div>
+</div>
+</div>
+<div class="page-row">
+<footer id="footer">
+   <div class="container">
+      <div class="row">
+         <div class="col-xs-10">&copy; 2017 Jan Buchar
+		 &middot; Powered by <a href="http://docs.getpelican.com/" target="_blank">Pelican</a>         </div>
+	 <div class="col-xs-2"><p class="pull-right"><a href="#"><i class="fa fa-arrow-up"></i><span class="hidden-xs"> Back to top</span></a></p></div>
+      </div>
+   </div>
+</footer></div>
+
+<script src="https://bucharjan.cz/theme/js/jquery.min.js"></script>
+
+<!-- Include all compiled plugins (below), or include individual files as needed -->
+<script src="https://bucharjan.cz/theme/js/bootstrap.min.js"></script>
+
+<!-- Enable responsive features in IE8 with Respond.js (https://github.com/scottjehl/Respond) -->
+<script src="https://bucharjan.cz/theme/js/respond.min.js"></script>
+
+    <!-- Google Analytics -->
+    <script type="text/javascript">
+
+        var _gaq = _gaq || [];
+        _gaq.push(['_setAccount', 'UA-83918237-1']);
+        _gaq.push(['_trackPageview']);
+
+        (function () {
+            var ga = document.createElement('script');
+            ga.type = 'text/javascript';
+            ga.async = true;
+            ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+            var s = document.getElementsByTagName('script')[0];
+            s.parentNode.insertBefore(ga, s);
+        })();
+    </script>
+    <!-- End Google Analytics Code -->
+
+</body>
+</html>

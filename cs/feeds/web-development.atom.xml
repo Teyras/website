@@ -1,0 +1,141 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom"><title>Jan Buchar - Web development</title><link href="https://bucharjan.cz/cs/" rel="alternate"></link><link href="https://bucharjan.cz/feeds/web-development.atom.xml" rel="self"></link><id>https://bucharjan.cz/cs/</id><updated>2016-09-05T21:05:00+02:00</updated><entry><title>My web development setup with uWSGI</title><link href="https://bucharjan.cz/cs/blog/web-development-setup-with-uwsgi-en.html" rel="alternate"></link><published>2016-09-05T21:05:00+02:00</published><updated>2016-09-05T21:05:00+02:00</updated><author><name>Jan Buchar</name></author><id>tag:bucharjan.cz,2016-09-05:/cs/blog/web-development-setup-with-uwsgi-en.html</id><summary type="html">&lt;p&gt;Until recently, I've used pretty much the same LAMP environment I installed when 
+I started with GNU/Linux. It had many drawbacks, the most important being 
+cryptic configuration (hello, mod_rewrite) and the need to edit files as root 
+when adding new applications using VirtualHosts. Also, running Python 
+applications is quite …&lt;/p&gt;</summary><content type="html">&lt;p&gt;Until recently, I've used pretty much the same LAMP environment I installed when 
+I started with GNU/Linux. It had many drawbacks, the most important being 
+cryptic configuration (hello, mod_rewrite) and the need to edit files as root 
+when adding new applications using VirtualHosts. Also, running Python 
+applications is quite a pain with Apache and mod_wsgi - most of the time, I just 
+went with whatever development server my framework offered.&lt;/p&gt;
+&lt;p&gt;Then I stumbled upon uWSGI. I was blown away with how versatile this web 
+application server is - it supports a plethora of programming languages, has a 
+powerful routing system and loads of other features. I experimented with it for 
+some time and this is the result - a flexible web development environment using 
+uWSGI and Nginx.&lt;/p&gt;
+&lt;h2&gt;Pluggable applications with uWSGI&lt;/h2&gt;
+&lt;p&gt;First, we'll start uWSGI in Emperor mode. It will monitor a path and make sure 
+that all uWSGI configuration files found there are running. It also reloads the 
+applications when their configuration changes. We'll be putting our applications 
+in &lt;code&gt;~/WWW&lt;/code&gt;, with the following structure:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span&gt;&lt;/span&gt;~/WWW
+├── app1
+│   ├── app1.ini
+│   ├── file1
+│   └── file2
+└── app2
+    ├── app2.ini
+    ├── file1
+    └── file2
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;As we see, there is a folder for each application that contains its sources and 
+also a uWSGI configuration file. The name of this file is used as the vassal 
+name by the Emperor. We'll start the Emperor now:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span&gt;&lt;/span&gt;uwsgi --emperor &lt;span class="s2"&gt;&amp;quot;~/WWW/*/*.ini&amp;quot;&lt;/span&gt; &lt;span class="se"&gt;\&lt;/span&gt;
+      --emperor-on-demand-directory /tmp/uwsgi/ &lt;span class="se"&gt;\&lt;/span&gt;
+      --logto %h/WWW/uwsgi.log &lt;span class="se"&gt;\&lt;/span&gt;
+      --vassals-set socket-chmod&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="m"&gt;666&lt;/span&gt; &lt;span class="se"&gt;\&lt;/span&gt;
+      --vassals-set &lt;span class="nv"&gt;idle&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="m"&gt;900&lt;/span&gt; &lt;span class="se"&gt;\&lt;/span&gt;
+      --vassals-set die-on-idle&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="m"&gt;1&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;The &lt;code&gt;--emperor-on-demand-directory&lt;/code&gt; flag tells the Emperor to make a UNIX domain 
+socket for each application (named &lt;code&gt;&amp;lt;vassal_name&amp;gt;.socket&lt;/code&gt;) in given directory 
+and activate the application when someone connects to that socket. When we 
+combine this with &lt;code&gt;--idle&lt;/code&gt; and &lt;code&gt;--die-on-idle&lt;/code&gt; on the vassals, we get a 
+webserver that automatically stops unused applications and their daemons. &lt;/p&gt;
+&lt;p&gt;We also need nginx to have read and write access to the sockets - that's why we 
+set their permissions to 666. If we wanted to be a bit more strict, we could 
+make a group for our user and nginx and &lt;code&gt;chown&lt;/code&gt; the sockets to this group.&lt;/p&gt;
+&lt;p&gt;Now, let's add an application! This one will be in PHP, but use whatever you 
+feel like. First, the "application" itself:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span&gt;&lt;/span&gt;&lt;span class="x"&gt;# ~/WWW/testapp/index.php&lt;/span&gt;
+&lt;span class="cp"&gt;&amp;lt;?php&lt;/span&gt;
+&lt;span class="k"&gt;echo&lt;/span&gt; &lt;span class="s2"&gt;&amp;quot;Hello from uWSGI&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;Now, we'll write the configuration file that tells uWSGI how to run it. &lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span&gt;&lt;/span&gt;&lt;span class="c1"&gt;# ~/WWW/testapp/testapp.ini&lt;/span&gt;
+&lt;span class="k"&gt;[uwsgi]&lt;/span&gt;
+&lt;span class="na"&gt;chdir&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="s"&gt;%d&lt;/span&gt;
+
+&lt;span class="c1"&gt;# PHP settings&lt;/span&gt;
+&lt;span class="na"&gt;plugin&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="s"&gt;0:php&lt;/span&gt;
+&lt;span class="na"&gt;php-docroot&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="s"&gt;%d&lt;/span&gt;
+&lt;span class="na"&gt;check-static&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="s"&gt;%d&lt;/span&gt;
+&lt;span class="na"&gt;php-app&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="s"&gt;%d/index.php&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;Noticed the &lt;code&gt;0:&lt;/code&gt; in the &lt;code&gt;plugin&lt;/code&gt; option? This little detail is actually really 
+important - it tells uWSGI to route HTTP requests to the PHP plugin. For more 
+details, see the documentation for &lt;code&gt;modifier1&lt;/code&gt;.&lt;/p&gt;
+&lt;p&gt;The Emperor should now notice the configuration file and run our application. 
+It is however bound to a UNIX domain socket - to access it, we need a 
+webserver to forward actual HTTP requests to it.&lt;/p&gt;
+&lt;h2&gt;Nginx - the fixed part&lt;/h2&gt;
+&lt;p&gt;Nginx will serve as a gateway to our applications. It should pass requests to 
+subdomains on localhost to corresponding UNIX domain sockets that belong to the 
+uWSGI vassals - requests on &lt;code&gt;myapp.localhost&lt;/code&gt; will be passed to 
+&lt;code&gt;/tmp/uwsgi/myapp.socket&lt;/code&gt;.&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span&gt;&lt;/span&gt;&lt;span class="c1"&gt;# nginx.conf&lt;/span&gt;
+&lt;span class="k"&gt;http&lt;/span&gt; &lt;span class="p"&gt;{&lt;/span&gt;
+        &lt;span class="kn"&gt;server&lt;/span&gt; &lt;span class="p"&gt;{&lt;/span&gt;
+                &lt;span class="kn"&gt;listen&lt;/span&gt; &lt;span class="mi"&gt;80&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;
+                &lt;span class="kn"&gt;server_name&lt;/span&gt; &lt;span class="p"&gt;~&lt;/span&gt;&lt;span class="sr"&gt;^(?&amp;lt;app&amp;gt;[^.]+)\.localhost;&lt;/span&gt;
+
+                &lt;span class="s"&gt;location&lt;/span&gt; &lt;span class="s"&gt;/&lt;/span&gt; &lt;span class="p"&gt;{&lt;/span&gt;
+                        &lt;span class="kn"&gt;include&lt;/span&gt; &lt;span class="s"&gt;uwsgi_params&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;
+                        &lt;span class="kn"&gt;uwsgi_pass&lt;/span&gt; &lt;span class="s"&gt;unix:/tmp/uwsgi/&lt;/span&gt;&lt;span class="nv"&gt;$app.socket&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;
+                &lt;span class="p"&gt;}&lt;/span&gt;
+        &lt;span class="p"&gt;}&lt;/span&gt;
+&lt;span class="p"&gt;}&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;This is not a complete configuration file - I only included the relevant parts. 
+That being said, you should now be able to open &lt;code&gt;testapp.localhost&lt;/code&gt; in a web 
+browser and see the output!&lt;/p&gt;
+&lt;h2&gt;Bonus - running uWSGI with systemd&lt;/h2&gt;
+&lt;p&gt;If you're running a recent GNU/Linux distribution, it's likely that you use 
+systemd. One of its better features is that it lets users run their own services 
+without any special privileges. We'll use that to make sure our uWSGI Emperor is 
+always running. First, we create a systemd unit file:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span&gt;&lt;/span&gt;&lt;span class="c1"&gt;# ~/.config/systemd/user/uwsgi-emperor.service&lt;/span&gt;
+&lt;span class="k"&gt;[Unit]&lt;/span&gt;
+&lt;span class="na"&gt;Description&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="s"&gt;uWSGI Emperor&lt;/span&gt;
+
+&lt;span class="k"&gt;[Service]&lt;/span&gt;
+&lt;span class="na"&gt;ExecStartPre&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="s"&gt;/usr/bin/mkdir -p /tmp/uwsgi/&lt;/span&gt;
+&lt;span class="na"&gt;ExecStartPre&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="s"&gt;/usr/bin/chmod 777 /tmp/uwsgi/&lt;/span&gt;
+&lt;span class="na"&gt;ExecStart&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="s"&gt;/usr/bin/uwsgi \&lt;/span&gt;
+&lt;span class="s"&gt;          --emperor &amp;quot;%h/WWW/*/*.ini&amp;quot; \&lt;/span&gt;
+&lt;span class="s"&gt;          --emperor-on-demand-directory /tmp/uwsgi/ \&lt;/span&gt;
+&lt;span class="s"&gt;          --logto %h/WWW/uwsgi.log \&lt;/span&gt;
+&lt;span class="s"&gt;          --vassals-set socket-chmod=666 \&lt;/span&gt;
+&lt;span class="s"&gt;          --vassals-set idle=900 \&lt;/span&gt;
+&lt;span class="s"&gt;          --vassals-set die-on-idle=1&lt;/span&gt;
+
+&lt;span class="k"&gt;[Install]&lt;/span&gt;
+&lt;span class="na"&gt;WantedBy&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="s"&gt;default.target&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;Now we'll make sure that the uWSGI Emperor starts when we log in:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span&gt;&lt;/span&gt;$ systemctl --user daemon-reload
+$ systemctl --user &lt;span class="nb"&gt;enable&lt;/span&gt; uwsgi-emperor
+$ systemctl --user start uwsgi-emperor
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;h2&gt;Conclusion&lt;/h2&gt;
+&lt;p&gt;We have set up a development environment where we can program in Python, Ruby, 
+PHP and tons of other languages (I also used it to run Pelican when I wrote this 
+post). All our code runs under a regular user (if that wasn't enough, uWSGI can 
+sandbox it using lxc). The applications are accessible with pretty URLs on the 
+standard HTTP port, which makes it easy to test them on various devices.&lt;/p&gt;</content><category term="uwsgi"></category><category term="nginx"></category><category term="linux"></category><category term="web"></category><category term="python"></category><category term="php"></category></entry></feed>

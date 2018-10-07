@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom"><title>Jan Buchar - KDE</title><link href="https://bucharjan.cz/" rel="alternate"></link><link href="https://bucharjan.cz/feeds/kde.atom.xml" rel="self"></link><id>https://bucharjan.cz/</id><updated>2016-10-07T15:00:00+02:00</updated><entry><title>Custom modifier-only shortcuts in Plasma 5.8</title><link href="https://bucharjan.cz/blog/plasma-custom-modifier-only-shortcuts.html" rel="alternate"></link><published>2016-10-07T15:00:00+02:00</published><updated>2016-10-07T15:00:00+02:00</updated><author><name>Jan Buchar</name></author><id>tag:bucharjan.cz,2016-10-07:/blog/plasma-custom-modifier-only-shortcuts.html</id><summary type="html">&lt;p&gt;The latest release of KDE Plasma (5.8) brought a new feature - it can open the 
+desktop menu when the meta (super, Windows...) key is pressed. Like in Windows 
+XP, remember? Alas, it's not yet possible to configure this to do something more 
+useful in the GUI, however weird this …&lt;/p&gt;</summary><content type="html">&lt;p&gt;The latest release of KDE Plasma (5.8) brought a new feature - it can open the 
+desktop menu when the meta (super, Windows...) key is pressed. Like in Windows 
+XP, remember? Alas, it's not yet possible to configure this to do something more 
+useful in the GUI, however weird this seems in a LTS release. After digging in 
+KWin's source code for a while, I found a way to set custom shortcuts in the 
+config files.&lt;/p&gt;
+&lt;p&gt;First, make sure KWin isn't running. I recommend opening a terminal and running 
+&lt;code&gt;killall kwin_x11&lt;/code&gt;. Now let's say we'd like to open krunner when Meta is pressed 
+and the desktop menu should be opened with Shift. Edit &lt;code&gt;~/.config/kwinrc&lt;/code&gt; and 
+add the following lines:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span&gt;&lt;/span&gt;&lt;span class="k"&gt;[ModifierOnlyShortuts]&lt;/span&gt;
+&lt;span class="na"&gt;Meta&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="s"&gt;org.kde.krunner,/App,,display&lt;/span&gt;
+&lt;span class="na"&gt;Shift&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="s"&gt;org.kde.plasmashell,/PlasmaShell,org.kde.PlasmaShell,activateLauncherMenu&lt;/span&gt;
+&lt;span class="na"&gt;Alt&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;
+&lt;span class="na"&gt;Control&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;The double comma in the &lt;code&gt;Meta&lt;/code&gt; value is not a typo. It means something like that 
+the called function is not in a namespace, in contrast to the function in the 
+&lt;code&gt;Shift&lt;/code&gt; value. An empty value means no action will be bound to the modifier.&lt;/p&gt;
+&lt;p&gt;Now, you just need to run KWin again with &lt;code&gt;kwin_x11 --replace&lt;/code&gt; and everything 
+should work. Note that it should be possible to bind any qdbus call to a 
+modifier key like this. Try using &lt;code&gt;qdbusviewer&lt;/code&gt; to explore the possibilites!&lt;/p&gt;</content><category term="KDE"></category><category term="Plasma"></category><category term="KWin"></category><category term="Linux"></category></entry></feed>

@@ -1,0 +1,188 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom"><title>Jan Buchar - Programming</title><link href="https://bucharjan.cz/cs/" rel="alternate"></link><link href="https://bucharjan.cz/feeds/programming.atom.xml" rel="self"></link><id>https://bucharjan.cz/cs/</id><updated>2017-07-31T14:45:00+02:00</updated><entry><title>Using Cython to protect a Python codebase</title><link href="https://bucharjan.cz/cs/blog/using-cython-to-protect-a-python-codebase-en.html" rel="alternate"></link><published>2017-07-31T14:45:00+02:00</published><updated>2017-07-31T14:45:00+02:00</updated><author><name>Jan Buchar</name></author><id>tag:bucharjan.cz,2017-07-31:/cs/blog/using-cython-to-protect-a-python-codebase-en.html</id><summary type="html">&lt;p&gt;Recently, I worked on a Python project that required the whole codebase to be 
+protected using Cython. Although protecting Python sources from reverse 
+engineering seems like a futile task at first, cythonizing all the code leads to 
+a reasonable amount of security (the binary is very difficult to disassemble, 
+but …&lt;/p&gt;</summary><content type="html">&lt;p&gt;Recently, I worked on a Python project that required the whole codebase to be 
+protected using Cython. Although protecting Python sources from reverse 
+engineering seems like a futile task at first, cythonizing all the code leads to 
+a reasonable amount of security (the binary is very difficult to disassemble, 
+but it's still possible to e.g. monkey patch parts of the program). &lt;/p&gt;
+&lt;p&gt;This security comes with a price though - the primary use case for Cython is
+writing compiled extensions that can easily interface with Python code.
+Therefore, the support for non-trivial module/package structures is rather
+limited and we have to do some extra work to achieve the desired results.&lt;/p&gt;
+&lt;p&gt;The first obstacle we had to overcome was that it's difficult to compile a whole
+Python package (as in "directory containing an &lt;code&gt;__init__.py&lt;/code&gt; file") with Cython. 
+Imagine the following structure:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span&gt;&lt;/span&gt;src
+├── mypkg
+│   ├── bar.py
+│   ├── foo.py
+│   └── __init__.py
+├── mypkg2
+│   ├── bar.py
+│   ├── foo.py
+│   └── __init__.py
+└── setup.py
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;The recommended way of cythonizing this would be using a &lt;code&gt;setup.py&lt;/code&gt; file such as 
+this:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span&gt;&lt;/span&gt;&lt;span class="kn"&gt;from&lt;/span&gt; &lt;span class="nn"&gt;setuptools&lt;/span&gt; &lt;span class="kn"&gt;import&lt;/span&gt; &lt;span class="n"&gt;setup&lt;/span&gt;
+&lt;span class="kn"&gt;from&lt;/span&gt; &lt;span class="nn"&gt;setuptools.extension&lt;/span&gt; &lt;span class="kn"&gt;import&lt;/span&gt; &lt;span class="n"&gt;Extension&lt;/span&gt;
+
+&lt;span class="kn"&gt;from&lt;/span&gt; &lt;span class="nn"&gt;Cython.Build&lt;/span&gt; &lt;span class="kn"&gt;import&lt;/span&gt; &lt;span class="n"&gt;cythonize&lt;/span&gt;
+&lt;span class="kn"&gt;from&lt;/span&gt; &lt;span class="nn"&gt;Cython.Distutils&lt;/span&gt; &lt;span class="kn"&gt;import&lt;/span&gt; &lt;span class="n"&gt;build_ext&lt;/span&gt;
+
+&lt;span class="n"&gt;setup&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;
+    &lt;span class="n"&gt;name&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="s2"&gt;&amp;quot;mypkg&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+    &lt;span class="n"&gt;ext_modules&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="n"&gt;cythonize&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;
+        &lt;span class="p"&gt;[&lt;/span&gt;
+           &lt;span class="n"&gt;Extension&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s2"&gt;&amp;quot;mypkg.*&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="s2"&gt;&amp;quot;mypkg/*.py&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;]),&lt;/span&gt;
+           &lt;span class="n"&gt;Extension&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s2"&gt;&amp;quot;mypkg2.*&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="s2"&gt;&amp;quot;mypkg2/*.py&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;])&lt;/span&gt;
+        &lt;span class="p"&gt;],&lt;/span&gt;
+        &lt;span class="n"&gt;build_dir&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="s2"&gt;&amp;quot;build&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+        &lt;span class="n"&gt;compiler_directives&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="nb"&gt;dict&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;
+        &lt;span class="n"&gt;always_allow_keywords&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="bp"&gt;True&lt;/span&gt;
+        &lt;span class="p"&gt;)),&lt;/span&gt;
+    &lt;span class="n"&gt;cmdclass&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="nb"&gt;dict&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;
+        &lt;span class="n"&gt;build_ext&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="n"&gt;build_ext&lt;/span&gt;
+    &lt;span class="p"&gt;),&lt;/span&gt;
+    &lt;span class="n"&gt;packages&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="s2"&gt;&amp;quot;mypkg&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s2"&gt;&amp;quot;mypkg2&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt;
+&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;The &lt;code&gt;setup.py&lt;/code&gt; is more or less what you would expect from a project that uses 
+Cython. There are two things to be noted though. First, the 
+&lt;code&gt;always_allow_keywords&lt;/code&gt; directive makes it possible for Flask view functions to 
+work correctly by disabling an optimization that only allows keyword arguments 
+for functions with a lot of parameters. Second, we do not use the &lt;code&gt;ext_package&lt;/code&gt; 
+parameter suggested by some guides, which would put the cythonized code into 
+another package. By omitting it, the compiled code is kept in the same place.&lt;/p&gt;
+&lt;p&gt;However, after we build our project with &lt;code&gt;python setup.py build_ext&lt;/code&gt;, we notice 
+that the resulting package cannot be imported - it is missing an &lt;code&gt;__init__.py&lt;/code&gt; 
+file. There is &lt;code&gt;__init__.so&lt;/code&gt; that can be imported from Python, but that isn't 
+enough to make a directory a package in Python's eyes. Not being able to import 
+the package is not the only problem - code inside it cannot perform 
+package-relative imports (e.g. &lt;code&gt;from .foo import foo&lt;/code&gt;) either, which breaks its 
+functionality.&lt;/p&gt;
+&lt;p&gt;To remedy this problem, we can copy the &lt;code&gt;__init__.py&lt;/code&gt; file from our source tree 
+after the rest of the project is built. A good way to do so is overriding the 
+&lt;code&gt;build_ext&lt;/code&gt; class in &lt;code&gt;setup.py&lt;/code&gt;:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span&gt;&lt;/span&gt;&lt;span class="c1"&gt;# ...&lt;/span&gt;
+
+&lt;span class="kn"&gt;from&lt;/span&gt; &lt;span class="nn"&gt;pathlib&lt;/span&gt; &lt;span class="kn"&gt;import&lt;/span&gt; &lt;span class="n"&gt;Path&lt;/span&gt;
+&lt;span class="kn"&gt;import&lt;/span&gt; &lt;span class="nn"&gt;shutil&lt;/span&gt;
+
+&lt;span class="c1"&gt;# ...&lt;/span&gt;
+
+&lt;span class="k"&gt;class&lt;/span&gt; &lt;span class="nc"&gt;MyBuildExt&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;build_ext&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+    &lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;run&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+        &lt;span class="n"&gt;build_ext&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;run&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+
+        &lt;span class="n"&gt;build_dir&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;Path&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;build_lib&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+        &lt;span class="n"&gt;root_dir&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;Path&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="vm"&gt;__file__&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;parent&lt;/span&gt;
+
+        &lt;span class="n"&gt;target_dir&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;build_dir&lt;/span&gt; &lt;span class="k"&gt;if&lt;/span&gt; &lt;span class="ow"&gt;not&lt;/span&gt; &lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;inplace&lt;/span&gt; &lt;span class="k"&gt;else&lt;/span&gt; &lt;span class="n"&gt;root_dir&lt;/span&gt;
+
+        &lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;copy_file&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;Path&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39;mypkg&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt; &lt;span class="o"&gt;/&lt;/span&gt; &lt;span class="s1"&gt;&amp;#39;__init__.py&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;root_dir&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;target_dir&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+        &lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;copy_file&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;Path&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39;mypkg2&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt; &lt;span class="o"&gt;/&lt;/span&gt; &lt;span class="s1"&gt;&amp;#39;__init__.py&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;root_dir&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;target_dir&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+        &lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;copy_file&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;Path&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39;mypkg&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt; &lt;span class="o"&gt;/&lt;/span&gt; &lt;span class="s1"&gt;&amp;#39;__main__.py&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;root_dir&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;target_dir&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+        &lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;copy_file&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;Path&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39;mypkg2&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt; &lt;span class="o"&gt;/&lt;/span&gt; &lt;span class="s1"&gt;&amp;#39;__main__.py&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;root_dir&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;target_dir&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+
+    &lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;copy_file&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;path&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;source_dir&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;destination_dir&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+        &lt;span class="k"&gt;if&lt;/span&gt; &lt;span class="ow"&gt;not&lt;/span&gt; &lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;source_dir&lt;/span&gt; &lt;span class="o"&gt;/&lt;/span&gt; &lt;span class="n"&gt;path&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;exists&lt;/span&gt;&lt;span class="p"&gt;():&lt;/span&gt;
+            &lt;span class="k"&gt;return&lt;/span&gt;
+
+        &lt;span class="n"&gt;shutil&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;copyfile&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="nb"&gt;str&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;source_dir&lt;/span&gt; &lt;span class="o"&gt;/&lt;/span&gt; &lt;span class="n"&gt;path&lt;/span&gt;&lt;span class="p"&gt;),&lt;/span&gt; &lt;span class="nb"&gt;str&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;destination_dir&lt;/span&gt; &lt;span class="o"&gt;/&lt;/span&gt; &lt;span class="n"&gt;path&lt;/span&gt;&lt;span class="p"&gt;))&lt;/span&gt;
+
+&lt;span class="n"&gt;setup&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;
+&lt;span class="c1"&gt;# ...&lt;/span&gt;
+    &lt;span class="n"&gt;cmdclass&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="nb"&gt;dict&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;
+        &lt;span class="n"&gt;build_ext&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="n"&gt;MyBuildExt&lt;/span&gt;
+    &lt;span class="p"&gt;),&lt;/span&gt;
+&lt;span class="c1"&gt;# ...&lt;/span&gt;
+&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;We have successfully created Python packages that can be imported from. They 
+reside under &lt;code&gt;build/lib.linux-x86_64-3.6&lt;/code&gt; or something similar. Sadly, this is 
+not enough for the distribution of our package. Ideally, we'd like to have an 
+installable package that only contains compiled code. The current standard for 
+Python archives is the wheel format (.whl), which aims to replace the .egg 
+format. So, let's try to create a wheel with &lt;code&gt;python setup.py bdist_wheel&lt;/code&gt;! 
+After the command finishes, there should be a &lt;code&gt;dist&lt;/code&gt; folder that contains a 
+wheel file. Unpacking it yields something like this:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span&gt;&lt;/span&gt;.
+├── mypkg
+│   ├── bar.cpython-36m-x86_64-linux-gnu.so
+│   ├── bar.py
+│   ├── foo.cpython-36m-x86_64-linux-gnu.so
+│   ├── foo.py
+│   ├── __init__.cpython-36m-x86_64-linux-gnu.so
+│   └── __init__.py
+├── mypkg-0.0.0.dist-info
+│   ├── DESCRIPTION.rst
+│   ├── METADATA
+│   ├── metadata.json
+│   ├── RECORD
+│   ├── top_level.txt
+│   └── WHEEL
+└── mypkg2
+    ├── bar.cpython-36m-x86_64-linux-gnu.so
+    ├── bar.py
+    ├── foo.cpython-36m-x86_64-linux-gnu.so
+    ├── foo.py
+    ├── __init__.cpython-36m-x86_64-linux-gnu.so
+    └── __init__.py
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;Apparently, the archive contains not only compiled code, but also the sources. 
+There is a way to fix this, however counter-intuitive it might seem. We need to 
+remove our packages from the &lt;code&gt;packages&lt;/code&gt; argument of the &lt;code&gt;setup&lt;/code&gt; call. This way, 
+the extensions will still be built and included in the wheel, but the source 
+code will not.&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span&gt;&lt;/span&gt;&lt;span class="n"&gt;setup&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;
+    &lt;span class="c1"&gt;# ...&lt;/span&gt;
+    &lt;span class="n"&gt;packages&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="p"&gt;[]&lt;/span&gt;
+&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;The content of the built wheel should then look like this:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span&gt;&lt;/span&gt;dist/
+├── mypkg
+│   ├── bar.cpython-36m-x86_64-linux-gnu.so
+│   ├── foo.cpython-36m-x86_64-linux-gnu.so
+│   ├── __init__.cpython-36m-x86_64-linux-gnu.so
+│   └── __init__.py
+├── mypkg-0.0.0.dist-info
+│   ├── DESCRIPTION.rst
+│   ├── METADATA
+│   ├── metadata.json
+│   ├── RECORD
+│   ├── top_level.txt
+│   └── WHEEL
+└── mypkg2
+    ├── bar.cpython-36m-x86_64-linux-gnu.so
+    ├── foo.cpython-36m-x86_64-linux-gnu.so
+    ├── __init__.cpython-36m-x86_64-linux-gnu.so
+    └── __init__.py
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;The wheel can be installed with &lt;code&gt;pip install dist/*.whl&lt;/code&gt;. If we do not need to 
+inspect the wheel or distribute it manually, we can just run &lt;code&gt;pip install .&lt;/code&gt; in 
+the project directory, which builds the wheel and installs it for us.&lt;/p&gt;
+&lt;p&gt;It is also possible to strip Python source code from .egg archives, but it 
+involves overriding the &lt;code&gt;bdist_egg&lt;/code&gt; command from &lt;code&gt;setuptools&lt;/code&gt;. I won't cover 
+that here, but if you're interested, check out the &lt;code&gt;--exclude-source-files&lt;/code&gt; 
+option and the &lt;code&gt;zap_pyfiles&lt;/code&gt; method of aforementioned command class.&lt;/p&gt;
+&lt;p&gt;By following this guide, you should be able to cythonize a Python codebase with 
+non-trivial package/module structure, thus making it difficult for evil hackers 
+to reverse engineer it and steal your programming know-how.&lt;/p&gt;</content><category term="Python"></category><category term="Cython"></category></entry></feed>
